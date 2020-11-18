@@ -1,90 +1,38 @@
 import numpy as np
-#import numdifftools as nd
 from math import sqrt
-from scipy.optimize import minimize_scalar
-
+from tkinter import *
+from tkinter import scrolledtext
+from tkinter.ttk import Checkbutton
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from matplotlib.figure import Figure
+import pandas as pd
 notations = True
-dim = 3
-#gr = (sqrt(5) - 1)/2
+dim = 4
+eps = 0.001
+u_0 = [4.0, -2.0, 4.0, 4.0]
 
-def BrentComb(a, c, func, eps):
-	
-	"""
-	Комбинированный метод Брента минимизации ф-ии одной переменной
-	 (применяется для фунцкий f_k(alpha) = J(u_k - alpha*p_k)
-	"""
-	K = (3 - sqrt(5)) / 2
-	x = (a + c)/2
-	w = (a + c)/2
-	v = (a + c)/2
-	u = 2*c
-	f_x = func(x)
-	f_w = func(w)
-	f_v = func(v)
-	while abs(u - x) >= eps:
-		if ((x != w and w != v and x != v) and (f_x != f_w and f_w != f_v and f_x != f_v)):
-			u = x - (((x - v)**2)*(f_x - f_w) - ((x - w)**2)*(f_x - f_v))/(2*((x - v)*(f_x - f_w) - (x - w)*(f_x - f_v)))
-		if ((u >= a + eps) and (u <= c - eps) and abs(u - x) < g/2):
-			d = abs(u - x)
-		else:
-			if x < (c - a)/2:
-				u = x + K*(c - x) # золотое сечение на [x, c]
-				d = c - x
-			else:
-				u = x - K*(x - a) # золотое сечение на [a, x]
-				d = x - a
-		if abs(u - x) < eps:
-			u = x + eps*np.sign(u - x)
-		f_u = func(u)
-		if f_u <= f_x:
-			if u >= x:
-				a = x
-			else:
-				c = x
-			v = w
-			w = x
-			x = u
-			f_v = f_w
-			f_w = f_x
-			f_x = f_u
-		else:
-			if u >= x:
-				c = u
-			else:
-				a = u
-			if ((f_u <= f_w) or (w == x)):
-				v = w
-				w = u
-				f_v = f_w
-				f_w = f_u
-			elif ((f_u <= f_v) or (v == x) or (v == w)):
-				v = u
-				f_v = f_u
-	return u, f_u
+bg_color = 'white'
+inserttext_bg_color = 'white'
+console_bg_color = 'azure'
 
-def GSS(a, b, f, eps):
-	"""
-	Метод золотого сечения для минимизации функции одной переменной
-	(применяется для фунцкий f_k(alpha) = J(u_k - alpha*p_k)
-	
-	"""
-	
-	c = b - (b - a) / gr
-	d = a + (b - a) / gr
-	
-	while abs(c - d) > eps:
-		if f(c) < f(d):
-			b = d
-		else:
-			a = c
+func_str = "J(u) = 20(u[2] - u[0])^2 + 50(u[3] - u[1])^2 + 3u[1]^2 - 2u[0]u[1] + u[0]^2"
 
-		c = b - (b - a) / gr
-		d = a + (b - a) / gr
+J_test = lambda u: (u[0] + 3)**2 + 3*(u[1] - 1)**2 + 4*(u[2] - 2)**2  - 3
 
-	return (b + a) / 2
-	
-def makeF(J, u, alph, p):
-	return 
+J = lambda u: 20*(u[2] - u[0])**2 + 50*(u[3] - u[1])**2 + 3*u[1]**2 - 2*u[0]*u[1] + u[0]**2
+
+def minimize (f, a = 0.0, c = 1.0,  precision = 0.0001): 
+	"""
+	Метод покрытий для минимизации функции одной переменной
+	"""
+	#eps = precision**2
+	delta = (c - a)*precision
+	x = a
+	values = []
+	while x <= c:
+		values.append(f(x))
+		x += delta
+	return a + delta*values.index(min(values))
 	
 def Gradient(func, point):
 	grad = []
@@ -98,7 +46,7 @@ def Gradient(func, point):
 	return np.array(grad)
 
 	
-def conj_vect(J, eps, u_0):
+def conj_vect(J, eps, u_0, steps_max, txt, ax, graph):
 	"""
 	Метод сопряженных векторов для минимизации функции многих переменных
 
@@ -116,54 +64,180 @@ def conj_vect(J, eps, u_0):
 				|grad(J)(u_k-1)|**2
 				
 	"""
-    
-	#grad = nd.Gradient(J)
+	clmns = ["alpha_k"] + ["beta_k"] + [f"u_k{i}" for i in range(dim)] + [f"p_k{i}" for i in range(dim)] + ["J_k"]
 	u_old = np.array(u_0)
 	p = Gradient(J, u_old)
 	f = lambda alph: J(u_old - alph*p)
-	print(f(1))
-	print(f(0.5))
-	#alpha = BrentComb(0, 2, f, 0.0001)[0]
-	alpha = minimize_scalar(f, bounds=(0, 1), method='bounded').x
+	alpha = minimize(f, 0, 2, 0.000001)
 	beta = 0.
-	if (notations == True):
-			print("Шаг 1")
-			print("  Alpha | Beta  - ", alpha, " | ", beta)
-			print(" Значение аргумента - ", u_old)
-			print(" Значение направления - ", p)
 	k = 1
-	while(np.linalg.norm(Gradient(J, u_old))>= eps):
-		if (notations == True):
-			print("Шаг ", k)
+	vals_arr = [J(u_old)]
+	iter_data = [alpha] + [beta] + u_old.tolist() + p.tolist() + [J(u_old)]
+	df = [iter_data]
+	
+	if (notations == True):
+		txt.insert(INSERT, "Шаг 1\n")
+		txt.insert(INSERT, "  Alpha | Beta  - ")
+		txt.insert(INSERT, alpha)
+		txt.insert(INSERT, " | ") 
+		txt.insert(INSERT, beta)
+		txt.insert(INSERT, "\n Значение аргумента - ")
+		txt.insert(INSERT, u_old)
+		txt.insert(INSERT, "\n Значение направления - ")
+		txt.insert(INSERT, p)
+	
+	while(np.linalg.norm(Gradient(J, u_old))>= eps) and (k < steps_max):
+		
 		u_new = u_old - alpha*p
 
-		if (k % dim == 0):
+		if (k % 4 == 0):
 			beta = 0.
 		else:
 			beta = - np.linalg.norm(Gradient(J, u_new))**2 / (np.linalg.norm(Gradient(J, u_old))**2)
-		p = Gradient(J, u_new) - beta * u_old
+		p = Gradient(J, u_new) - beta*p
 		f = lambda alph: J(u_old - alph*p)
-		print(f(1))
-		#alpha = BrentComb(0, 1, f, 0.0001)[0]
-		alpha = minimize_scalar(f, bounds=(0, 1), method='bounded').x
-		
+		alpha = minimize(f, 0, 2, 0.0001)
 		u_old = u_new
-		if (notations == True):
-			print("  Alpha | Beta  - ", alpha, " | ", beta)
-			print(" Значение аргумента - ", u_new)
-			print(" Значение направления - ", p)
-			print ("Минимум функции: ", J(u_old))
+		
+		vals_arr.append(J(u_old))
+		
+		iter_data = [alpha] + [beta] + u_old.tolist() + p.tolist() + [J(u_old)]
+		df.append(iter_data)
+		
 		k += 1
-	print ("Результат получен через ", k, "шагов")
-	print ("Значение аргумента:", np.array(u_old))
-	print ("Минимум функции: ", J(u_old))
-	return(u_new)
+		
+		ax.cla()
+		ax.set_ylim([0.0 , max(vals_arr)]) 
+		ax.grid()
+		ax.plot(range(1, k + 1), vals_arr, color = 'red')
+		graph.draw()
+		
+		if (notations == True):
+			txt.insert(INSERT, "\nШаг ")
+			txt.insert(INSERT, k)
+			txt.insert(INSERT, "\n  Alpha -               ")
+			txt.insert(INSERT, alpha)
+			txt.insert(INSERT, "\n  Beta  -               ")
+			txt.insert(INSERT, beta)
+			txt.insert(INSERT, "\n Значение аргумента -   ")
+			txt.insert(INSERT, u_old)
+			txt.insert(INSERT, "\n Значение направления - ")
+			txt.insert(INSERT, p)
+			txt.insert(INSERT, "\n Минимум функции:       ")
+			txt.insert(INSERT, J(u_old))
 
-J =	lambda u: (u[0] + 3)**2 + 3*(u[1] - 1)**2 + 4*(u[2] - 2)**2  - 3
-eps = 0.001
-u_0 = [4.0, -2.0, 4.0]
+	exceldata = pd.DataFrame(df, columns = clmns)
+	try:
+		exceldata.to_excel("Results.xlsx")
+	except:
+		pass
+		
+	ax.cla()
+	ax.set_ylim([0.0 , max(vals_arr)]) 
+	ax.grid()
+	ax.plot(range(1, k + 1), vals_arr, color = 'red')
+	graph.draw()
 	
-conj_vect(J, eps, u_0)	
+	txt.insert(INSERT, "\n\n Результат получен через ") 
+	txt.insert(INSERT, k)
+	txt.insert(INSERT, "шагов")
+	txt.insert(INSERT, "\n Значение аргумента:")
+	txt.insert(INSERT, np.array(u_old))
+	txt.insert(INSERT, "\n Минимум функции: ")
+	txt.insert(INSERT, J(u_old))
+	txt.update_idletasks()
+		
+	#return(u_new)
+
+
+def clicked():
+	ax.cla()
+	ax.grid()
+	graph.draw()
+	
+	if (len(txt_2.get()) != 0):
+		eps = float(txt_2.get())
+	else:
+		eps = 0.001
+	
+	if (len(txt_3.get()) != 0):
+		steps_max = float(txt_3.get())
+	else:
+		steps_max = 1000
+	
+	if (chk4_state.get() == 1) or (len(txt_4.get()) == 0):
+		u_0 = np.array([np.random.uniform(-1, 1, dim)]).reshape(dim)
+	else:
+		u_0 = list(map(float, txt_4.get().split()))
+	
+	scroll_txt.delete(1.0, END)
+	conj_vect(J, eps, u_0, steps_max, scroll_txt, ax, graph)
+	
+	return
+	
+window = Tk()
+window["bg"] = bg_color
+window.title ("Практикум на ЭВМ")
+window.geometry('1600x600')
+
+lbl_1 = Label(window, text = "Функционал", font = ("Cambria", 20))
+lbl_1.configure(background = bg_color)
+lbl_1.grid(column = 0, row = 0)
+
+lbl_1_func = Label(window, text = func_str, font = ("Cambria", 15))
+lbl_1_func.configure(background = bg_color)
+lbl_1_func.grid(column = 0, row = 1)
+
+btn = Button(window, text = "Минимизировать", bg = bg_color, command = clicked)
+btn.configure(background = inserttext_bg_color)
+btn.grid(column = 0, row = 2)
+
+lbl_2 = Label(window, text = "Точность", font = ("Cambria", 14))
+lbl_2.grid(column = 1, row = 0, sticky = 'W')
+
+txt_2 = Entry(window, width = 15)
+txt_2.configure(background = inserttext_bg_color)
+txt_2.insert(0, '0.001')
+txt_2.grid(column = 1, row = 0)
+
+lbl_3 = Label(window, text = "Кол-во итераций", font = ("Cambria", 14))
+lbl_3.grid(column = 1, row = 1, sticky = 'W')
+
+txt_3 = Entry(window, width = 15)
+txt_3.configure(background = inserttext_bg_color)
+txt_3.insert(0, '228')
+txt_3.grid(column = 1, row = 1)
+
+
+lbl_4 = Label(window, text = "Начальная точка", font = ("Cambria", 14))
+lbl_4.grid(column = 1, row = 2, sticky = 'W')
+
+txt_4 = Entry(window, width = 15)
+txt_4.configure(background = inserttext_bg_color)
+txt_4.insert(0, '22 8 14 88')
+txt_4.grid(column = 1, row = 2)
+
+chk4_state = IntVar()
+chk4_state.set(1)
+chk4 = Checkbutton(window, text = "Автоматически", var = chk4_state)
+chk4.grid(column = 1, row = 2, sticky = 'E')
+
+scroll_txt = scrolledtext.ScrolledText(window, width = 100, height = 27, pady = 5, padx = 5)
+scroll_txt.configure(background = console_bg_color)
+scroll_txt.grid(column = 0, row = 3)
+
+fig = Figure()     
+ax = fig.add_subplot(111) 
+ax.set_xlabel("Номер шага") 
+ax.set_ylabel("Значение J(u)") 
+ax.grid()
+
+graph = FigureCanvasTkAgg(fig, master = window)
+graph.get_tk_widget().grid(column = 1, row = 3, pady = 5, padx = 5)
+
+window.mainloop()
+
+	
 	
 	
 	
